@@ -3,7 +3,17 @@
 
 using namespace std;
 
+GoString toGoString(const char *str){
+	int len = 0;
+	while(str[len] != '\0') len++;
+	GoString retVal = {str, len};
+	return retVal;
+}
+
+
 int main(int argc, char **argv) {
-	GoString host = {"127.0.0.1", 9};
-	startClient(host, 8081);
+	startClient(toGoString("127.0.0.1"), 8081);
+	const char *ss = "asdfasdf";
+	send(toGoString("hi world"));
+	cout << receiveString();
 }

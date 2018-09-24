@@ -19,6 +19,8 @@ import (
 	quicconn "github.com/marten-seemann/quic-conn"
 )
 
+var conn net.Conn
+
 func main(){
 
 	serverCmd := flag.Bool("s", false, "server")
@@ -46,50 +48,54 @@ func startServer(port int){
 	}
 
 	fmt.Println("Waiting for incoming connection")
-	conn, err := ln.Accept()
+	conn, err = ln.Accept()
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("Established connection")
 
 	for {
-		message := receive(conn)
+		message := receive()
 		if err != nil {
 			panic(err)
 		}
-		fmt.Print("Message from client: ", string(message) + "\n")
+		fmt.Print("Message from client: ", message + "\n")
 		//echo back
-		send(conn, message)
+		send(message)
 	}
 }
 
 //export startClient
 func startClient(ip string, port int){
 	tlsConf := &tls.Config{InsecureSkipVerify: true}
-	conn, err := quicconn.Dial(ip +":" + strconv.Itoa(port),tlsConf)
+	var err error
+	conn, err = quicconn.Dial(ip +":" + strconv.Itoa(port),tlsConf)
 	if err != nil{
 		panic(err)
 	}
 
 	message := "Ping from client"
-	send(conn, []byte(message))
+	send(message)
 	fmt.Printf("Sending message: %s\n", message)
 	//listen for reply
-	answer := receive(conn)
+	answer := receive()
 	if err != nil {
 		panic(err)
 	}
-	fmt.Print("Message from server: " + string(answer) + "\n")
+	fmt.Print("Message from server: " + answer + "\n")
 }
 
-func send(conn net.Conn, message []byte){
-	length := len(message)
+//export send
+func send(message string){
+	messageBytes := []byte(message)
+	length := len(messageBytes)
 	bs := []byte{byte(length >> 24), byte(length >> 16), byte(length >> 8), byte(length)}
 	conn.Write(bs)
-	conn.Write(message)
+	conn.Write(messageBytes)
 }
 
-func receive(conn net.Conn) ([]byte){
+//export receive
+func receive() (string){
 	reader := bufio.NewReader(conn)
 	a, err := reader.ReadByte()
 	b, err := reader.ReadByte()
@@ -105,7 +111,27 @@ func receive(conn net.Conn) ([]byte){
 		readBytes[i], err = reader.ReadByte()
 	}
 	
-	return readBytes
+	return string(readBytes)
+}
+
+//export receiveString
+func receiveString() *C.char {
+	reader := bufio.NewReader(conn)
+	a, err := reader.ReadByte()
+	b, err := reader.ReadByte()
+	c, err := reader.ReadByte()
+	d, err := reader.ReadByte()
+
+	if err != nil {
+		panic(err)
+	}
+	length := int(d) | int(c << 8) | int(b << 16) | int(a << 24)
+	readBytes := make([]byte,length)
+	for i := 0; i < length; i++ {
+		readBytes[i], err = reader.ReadByte()
+	}
+
+	return C.CString(string(readBytes))
 }
 
 func generateTLSConfig() (*tls.Config, error){

@@ -57,6 +57,12 @@ extern void startServer(GoInt p0);
 
 extern void startClient(GoString p0, GoInt p1);
 
+extern void send(GoString p0);
+
+extern GoString receive();
+
+extern char* receiveString();
+
 #ifdef __cplusplus
 }
 #endif
