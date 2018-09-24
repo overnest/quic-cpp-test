@@ -13,7 +13,6 @@ GoString toGoString(const char *str){
 
 int main(int argc, char **argv) {
 	startClient(toGoString("127.0.0.1"), 8081);
-	const char *ss = "asdfasdf";
 	send(toGoString("hi world"));
 	cout << receiveString();
 }
