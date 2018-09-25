@@ -11,8 +11,8 @@ I compiled quic_lib.go from go/src/github.com/marten-seemann/quic-conn/example a
 
 To compile yourself and update the shared object libraries do the following:
 
-1. $cp quic_lib.go $HOME/go/src/github.com/marten-seeman/example
-2. $cd $HOME/go/src/github.com/marten-seeman/example
-3. $go build -o quic_lib.so -buildmode=c-shared quic_lib.go
+1. `$cp quic_lib.go $HOME/go/src/github.com/marten-seeman/example`
+2. `$cd $HOME/go/src/github.com/marten-seeman/example`
+3. `$go build -o quic_lib.so -buildmode=c-shared quic_lib.go`
 4. Copy quic_lib.so and quic_lib.h into main directory of this repo
-5. Use the provided make file $make server and $make client
+5. Use the provided make file `$make server` and `$make client`
