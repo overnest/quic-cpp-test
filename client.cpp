@@ -14,5 +14,6 @@ GoString toGoString(const char *str){
 int main(int argc, char **argv) {
 	startClient(toGoString("127.0.0.1"), 8081);
 	send(toGoString("hi world"));
-	cout << receiveString();
+	cout << receive() << endl;
+	close();
 }

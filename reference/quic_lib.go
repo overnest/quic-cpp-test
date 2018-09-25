@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"math/big"
+	//"math/rand"
 	"time"
 	"net"
 	
@@ -20,6 +21,10 @@ import (
 )
 
 var conn net.Conn
+
+//var ln net.Listener
+
+//conns := make(map[string]net.Conn)
 
 func main(){
 
@@ -53,17 +58,21 @@ func startServer(port int){
 		panic(err)
 	}
 	fmt.Println("Established connection")
-
-	for {
-		message := receive()
-		if err != nil {
-			panic(err)
-		}
-		fmt.Print("Message from client: ", message + "\n")
-		//echo back
-		send(message)
-	}
 }
+
+//export listen
+/*func listen() int {
+	conn, err := ln.Accept()
+	if err != nil {
+		panic(err)
+	}
+	
+	id := rand.Intn(10000000)
+	while if inside already choose different one
+
+	conns[id] = conn
+	return id
+}*/
 
 //export startClient
 func startClient(ip string, port int){
@@ -73,16 +82,11 @@ func startClient(ip string, port int){
 	if err != nil{
 		panic(err)
 	}
+}
 
-	message := "Ping from client"
-	send(message)
-	fmt.Printf("Sending message: %s\n", message)
-	//listen for reply
-	answer := receive()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Print("Message from server: " + answer + "\n")
+//export close
+func close(){
+	conn.Close()
 }
 
 //export send
@@ -90,12 +94,13 @@ func send(message string){
 	messageBytes := []byte(message)
 	length := len(messageBytes)
 	bs := []byte{byte(length >> 24), byte(length >> 16), byte(length >> 8), byte(length)}
+	//conn := conns[id]
 	conn.Write(bs)
 	conn.Write(messageBytes)
 }
 
 //export receive
-func receive() (string){
+func receive() *C.char {
 	reader := bufio.NewReader(conn)
 	a, err := reader.ReadByte()
 	b, err := reader.ReadByte()
@@ -103,27 +108,8 @@ func receive() (string){
 	d, err := reader.ReadByte()
 
 	if err != nil {
-		panic(err)
-	}
-	length := int(d) | int(c << 8) | int(b << 16) | int(a << 24)
-	readBytes := make([]byte,length)
-	for i := 0; i < length; i++ {
-		readBytes[i], err = reader.ReadByte()
-	}
-	
-	return string(readBytes)
-}
-
-//export receiveString
-func receiveString() *C.char {
-	reader := bufio.NewReader(conn)
-	a, err := reader.ReadByte()
-	b, err := reader.ReadByte()
-	c, err := reader.ReadByte()
-	d, err := reader.ReadByte()
-
-	if err != nil {
-		panic(err)
+		//panic(err)
+		return nil
 	}
 	length := int(d) | int(c << 8) | int(b << 16) | int(a << 24)
 	readBytes := make([]byte,length)
