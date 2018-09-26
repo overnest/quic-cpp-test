@@ -53,15 +53,17 @@ extern "C" {
 #endif
 
 
-extern void startServer(GoInt p0);
+extern GoUint8 startServer(GoInt p0);
 
-extern void startClient(GoString p0, GoInt p1);
+extern GoInt listen();
 
-extern void close();
+extern GoInt startClient(GoString p0, GoInt p1);
 
-extern void send(GoString p0);
+extern void close(GoInt p0);
 
-extern char* receive();
+extern GoUint8 send(GoInt p0, GoString p1);
+
+extern char* receive(GoInt p0);
 
 #ifdef __cplusplus
 }

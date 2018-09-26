@@ -13,18 +13,16 @@ import (
 	"flag"
 	"fmt"
 	"math/big"
-	//"math/rand"
+	mathrand "math/rand"
 	"time"
 	"net"
+	"sync"
 	
 	quicconn "github.com/marten-seemann/quic-conn"
 )
 
-var conn net.Conn
-
-//var ln net.Listener
-
-//conns := make(map[string]net.Conn)
+var ln net.Listener
+var conns sync.Map
 
 func main(){
 
@@ -41,74 +39,104 @@ func main(){
 }
 
 //export startServer
-func startServer(port int){
+func startServer(port int) bool {
 	tlsConf, err := generateTLSConfig()
 	if err != nil {
-		panic(err)
+		return false
 	}
 
-	ln, err := quicconn.Listen("udp",":" + strconv.Itoa(port), tlsConf)
+	ln, err = quicconn.Listen("udp",":" + strconv.Itoa(port), tlsConf)
 	if err != nil {
-		panic(err)
+		return false
 	}
 
-	fmt.Println("Waiting for incoming connection")
+	return true
+
+	/*fmt.Println("Waiting for incoming connection")
 	conn, err = ln.Accept()
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("Established connection")
+	fmt.Println("Established connection")*/
 }
 
 //export listen
-/*func listen() int {
+func listen() int {
 	conn, err := ln.Accept()
 	if err != nil {
 		panic(err)
+		return -1
 	}
 	
-	id := rand.Intn(10000000)
-	while if inside already choose different one
+	id := mathrand.Intn(10000000)
+	_, ok := conns.Load(id)
+	for ok {
+		id = mathrand.Intn(10000000)
+		_, ok = conns.Load(id)
+	}
 
-	conns[id] = conn
+	conns.Store(id, conn)
 	return id
-}*/
+}
 
 //export startClient
-func startClient(ip string, port int){
+func startClient(ip string, port int) int {
 	tlsConf := &tls.Config{InsecureSkipVerify: true}
-	var err error
-	conn, err = quicconn.Dial(ip +":" + strconv.Itoa(port),tlsConf)
+	conn, err := quicconn.Dial(ip +":" + strconv.Itoa(port),tlsConf)
 	if err != nil{
-		panic(err)
+		//panic(err)
+		return -1
 	}
+
+	id := mathrand.Intn(10000000)
+	_, ok := conns.Load(id)
+	for ok {
+		id = mathrand.Intn(10000000)
+		_, ok = conns.Load(id)
+	}
+	
+	conns.Store(id, conn)
+	return id
 }
 
 //export close
-func close(){
-	conn.Close()
+func close(id int){
+	conn, ok := conns.Load(id)
+	if ok {
+		conn.(net.Conn).Close()
+		conns.Delete(id)
+	}
 }
 
 //export send
-func send(message string){
+func send(id int, message string) bool {
+	conn, ok := conns.Load(id)
+	if !ok {
+		return false
+	}
 	messageBytes := []byte(message)
 	length := len(messageBytes)
 	bs := []byte{byte(length >> 24), byte(length >> 16), byte(length >> 8), byte(length)}
-	//conn := conns[id]
-	conn.Write(bs)
-	conn.Write(messageBytes)
+	conn.(net.Conn).Write(bs)
+	conn.(net.Conn).Write(messageBytes)
+	return true
 }
 
 //export receive
-func receive() *C.char {
-	reader := bufio.NewReader(conn)
+func receive(id int) *C.char {
+	conn, ok := conns.Load(id)
+	if !ok {
+		return nil
+	}
+
+	reader := bufio.NewReader(conn.(net.Conn))
 	a, err := reader.ReadByte()
 	b, err := reader.ReadByte()
 	c, err := reader.ReadByte()
 	d, err := reader.ReadByte()
 
 	if err != nil {
-		//panic(err)
+		conns.Delete(id)
 		return nil
 	}
 	length := int(d) | int(c << 8) | int(b << 16) | int(a << 24)
