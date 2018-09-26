@@ -14,19 +14,35 @@ Use:
 To create a connection with a server use the startClient(ip string, port int) function.
 To listen to connections on a port use the startServer(port int) function.
 
-As of my last push sending and receiving will no longer be called from Go.
+As of my last push sending, receiving, and listening will no longer be called from Go.
 It will need to be called from C++ like in the examples.
 
-send(GoString p0) is pretty straight forward, just convert to GoString in example given
+The id used as an argument in the send, receive and close functions refers to the id of a connection when it is created.
+listen() and startClient() create their a connection and return the connection id that can be used to call functions on it.
 
-receive() needs to be run in a loop like this:
+send(int id, GoString p0) is pretty straight forward, just convert to GoString in example given
+
+close(int id) is pretty straight forward as well
+
+receive(int id) needs to be run in a loop like this:
 ```C++
 while(true){
-	 char *received = receive();
+	 char *received = receive(id);
 	 if(received == NULL){
 	   break;
 	 }
 	 //do whatever
 }
 ```
+
+listen() needs to be run like this
+```C++
+startServer(8081);
+while(true){
+	int id = listen();
+	//do whatever
+}
+```
+startServer(int port) must be called before entering the loop
+
 receive() will return a null pointer if the connection is broken so you will need to check after each read to break the loop.
