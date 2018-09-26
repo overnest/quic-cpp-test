@@ -1,5 +1,5 @@
 #include <iostream>
-//#include <thread>
+#include <thread>
 #include "quic_lib.h"
 
 using namespace std;
@@ -26,8 +26,8 @@ int main(int argc, char ** argv) {
 	startServer(8081);
 	while(true){
 		int id = listen();
-		//thread new_thread (listenConn, id);
-		listenConn(id);
+		thread new_thread (listenConn, id);
+		new_thread.detach();
 	}
 
 	return 0;
