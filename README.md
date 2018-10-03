@@ -1,6 +1,13 @@
-This repo will eventually be updated to follow the design patterns of Stellar/src/overlay networking files.
-For now it contains a simple example where the client pings the server and it pings the same message back.
-C++ wrapper files just call exported methods and feeds the correct C++ type defs as arguments.
+This repo has been updated to use a Singleton design pattern that has two purposes:
+1. To prevent duplicate GoLang containers.
+2. To allow external calls to the library without dealing with Go types.
+
+Since Go cannot export complex structs such as network connections and socket listeners to C++, I was forced to keep them inside the Go container like this:
+```Go
+var ln net.Listener
+var conns sync.Map
+```
+By keeping these global they do not need to be included in function parameters and return types which allow them to exported with cgo. Since C++ can't see any of this happening calling the exported library must be done from a Singleton.
 
 Look inside the references folder to find the GoLang file that was used to generate quic_lib.so and quic_lib.h.
 The folder also includes instructions to generate the files yourself.
@@ -10,39 +17,44 @@ Compile instructions:
 2. Run the binaries with `./server` and `./client`
 
 Use:
-
-To create a connection with a server use the startClient(ip string, port int) function.
-To listen to connections on a port use the startServer(port int) function.
-
-As of my last push sending, receiving, and listening will no longer be called from Go.
-It will need to be called from C++ like in the examples.
-
-The id used as an argument in the send, receive and close functions refers to the id of a connection when it is created.
-listen() and startClient() create their a connection and return the connection id that can be used to call functions on it.
-
-send(int id, GoString p0) is pretty straight forward, just convert to GoString in example given
-
-close(int id) is pretty straight forward as well
-
-receive(int id) needs to be run in a loop like this:
+To start listening for connections:
 ```C++
-while(true){
-	 char *received = receive(id);
-	 if(received == NULL){
-	   break;
-	 }
-	 //do whatever
-}
+QUIC* q = QUIC::getInstance();
+bool success = q->start(8081, getReceiveFunc);
 ```
-
-listen() needs to be run like this
+The second parameter to start needs a function that returns a function pointer. It will also return true or false.
 ```C++
-startServer(8081);
-while(true){
-	int id = listen();
+void receive(const char *str){
+	if(str == NULL){
+		//handle connection closed
+	}
+	cout << str << endl;
+ 	//do whatever
+}
+typedef void (*rptr)(const char *);
+rptr getReceiveFunc(int id){
 	//do whatever
+	return receive;
 }
 ```
-startServer(int port) must be called before entering the loop
+Receiving function will get a null value when the connection is broken. The threads inside the Singleton are not tracked because they will auto terminate when they receive a null value (the disconnect signal). The connection at the GoLang level is also deleted automatically. However the stored function pointers will remain in the Singleton but will never be called since no thread for it exists anymore. If another connection reuses the same ID it will simply be overriden.
+When you're done call the following:
+```C++
+q->stop();
+```
+This will stop the server and safely close all connections. If you forget to call this don't worry because it gets called by the singleton destructor anyway.
 
-receive() will return a null pointer if the connection is broken so you will need to check after each read to break the loop.
+To start a connection:
+```C++
+int id = q->connect("127.0.0.1", 8081, receive);
+```
+Make sure to store the returned integer ID since you will need it to call all functions related to the connection. The second argument is similar that of starting the server but you just need to provide a function pointer directly this time.
+
+To send:
+```C++
+bool success = q->sendMsg(id, "hi world");
+```
+And to close:
+```C++
+q->disconnect(id);
+```
