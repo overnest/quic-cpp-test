@@ -34,7 +34,7 @@ func main(){
 		startServer(8081)
 	}
 	if *clientCmd {
-		startClient("127.0.0.1",8081)
+		startConn("127.0.0.1",8081)
 	}
 }
 
@@ -51,52 +51,56 @@ func startServer(port int) bool {
 	}
 
 	return true
-
-	/*fmt.Println("Waiting for incoming connection")
-	conn, err = ln.Accept()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Established connection")*/
 }
 
 //export listen
 func listen() int {
 	conn, err := ln.Accept()
 	if err != nil {
-		panic(err)
 		return -1
 	}
 	
+	mathrand.Seed(time.Now().UnixNano())
 	id := mathrand.Intn(10000000)
-	_, ok := conns.Load(id)
-	for ok {
+	for connExists(id) {
 		id = mathrand.Intn(10000000)
-		_, ok = conns.Load(id)
 	}
 
 	conns.Store(id, conn)
 	return id
 }
 
-//export startClient
-func startClient(ip string, port int) int {
+//export closeAll
+func closeAll(){
+	ln.Close()
+	conns.Range(func(key interface{}, value interface{}) bool {
+		close(key.(int))
+		return true
+	})
+}
+
+//export startConn
+func startConn(ip string, port int) int {
 	tlsConf := &tls.Config{InsecureSkipVerify: true}
 	conn, err := quicconn.Dial(ip +":" + strconv.Itoa(port),tlsConf)
 	if err != nil{
-		//panic(err)
 		return -1
 	}
-
+	
+	mathrand.Seed(time.Now().UnixNano())
 	id := mathrand.Intn(10000000)
-	_, ok := conns.Load(id)
-	for ok {
+	for connExists(id) {
 		id = mathrand.Intn(10000000)
-		_, ok = conns.Load(id)
 	}
 	
 	conns.Store(id, conn)
 	return id
+}
+
+//export connExists
+func connExists(id int) bool {
+	_, ok := conns.Load(id)
+	return ok
 }
 
 //export close

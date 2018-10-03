@@ -1,20 +1,19 @@
 #include <iostream>
-#include "quic_lib.h"
+#include "QUIC.h"
+#include <thread>
+#include <chrono>
 
 using namespace std;
 
-GoString toGoString(const char *str){
-	int len = 0;
-	while(str[len] != '\0') len++;
-	GoString retVal = {str, len};
-	return retVal;
+void Receive(const char *str){
+	cout << str << endl;
 }
 
-
 int main(int argc, char **argv) {
-	int id = startClient(toGoString("127.0.0.1"), 8081);
-	send(id, toGoString("hi world"));
-	cout << receive(id) << endl;
-	close(id);
+	QUIC* q = QUIC::getInstance();
+	int id = q->connect("127.0.0.1", 8081, Receive);
+	q->sendMsg(id, "hi world");
+	this_thread::sleep_for(chrono::seconds(10));
+	q->disconnect(id);
 	return 0;
 }

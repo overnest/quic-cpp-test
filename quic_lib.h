@@ -57,7 +57,11 @@ extern GoUint8 startServer(GoInt p0);
 
 extern GoInt listen();
 
-extern GoInt startClient(GoString p0, GoInt p1);
+extern void closeAll();
+
+extern GoInt startConn(GoString p0, GoInt p1);
+
+extern GoUint8 connExists(GoInt p0);
 
 extern void close(GoInt p0);
 

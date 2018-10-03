@@ -1,34 +1,32 @@
 #include <iostream>
+#include "QUIC.h"
 #include <thread>
-#include "quic_lib.h"
+#include <chrono>
 
 using namespace std;
 
-GoString toGoString(const char *str){
-	int len = 0;
-	while(str[len] != '\0') len++;
-	GoString retVal = {str, len};
-	return retVal;
+QUIC* q;
+int myID;
+//function that handles the response
+void receive(const char *str){
+	cout << str << endl;
+	q->sendMsg(myID, str);
 }
-
-void listenConn(int id){
-	while(true){
-		char *received = receive(id);
-		if(received == NULL){
-			break;
-		}
-		cout << "Received from client: " << received << endl;
-		send(id, toGoString(received));
-	}
+//function that returns function pointer
+typedef void (*rptr)(const char *);
+rptr getReceiveFunc(int id){
+	myID = id;
+	return receive;
 }
 
 int main(int argc, char ** argv) {
-	startServer(8081);
-	while(true){
-		int id = listen();
-		thread new_thread (listenConn, id);
-		new_thread.detach();
-	}
-
+	//get singleton
+	q = QUIC::getInstance();
+	//start the server
+	q->start(8081, getReceiveFunc);
+	//keep open for 20 min
+	this_thread::sleep_for(chrono::seconds(1200));
+	//close all connections and stop listening for new ones
+	q->stop();
 	return 0;
 }
