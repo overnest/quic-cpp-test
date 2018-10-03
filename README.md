@@ -12,9 +12,16 @@ By keeping these global they do not need to be included in function parameters a
 Look inside the references folder to find the GoLang file that was used to generate quic_lib.so and quic_lib.h.
 The folder also includes instructions to generate the files yourself.
 
-Compile instructions:
-1. `$make server` and `$make client`
+Example instructions:
+1. `$make server` and `$make client` or just run `$make all`
 2. Run the binaries with `./server` and `./client`
+
+To include in another project you will need 4 files:
+1. QUIC.cpp
+2. QUIC.h
+3. quic_lib.so
+4. quic_lib.h
+Modify your makefile and follow examples below.
 
 Use:
 To start listening for connections:
