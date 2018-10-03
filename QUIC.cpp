@@ -52,12 +52,19 @@ QUIC::~QUIC()
 		stop();
 }
 
-void QUIC::start(int port, rptr f(int))
+bool QUIC::start(int port, rptr f(int))
 {
-	std::thread t([=] {
-	running = startServer(port);
+	//prevent more than one listener
 	if(running)
 	{
+		return false;
+	}
+	running = startServer(port);
+	if(!running)
+	{
+		return false;
+	}
+	std::thread t([=] {
 		while(true){
 			int id = listen();
 			if(id < 0)
@@ -69,9 +76,9 @@ void QUIC::start(int port, rptr f(int))
 			new_thread.detach();
 		}
 		running = false;
-	}
 	});
 	t.detach();
+	return true;
 }
 
 void QUIC::stop()

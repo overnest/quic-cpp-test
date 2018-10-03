@@ -24,7 +24,7 @@ class QUIC
 	/* Destructor */
 	~QUIC();
 	/* Public method to start listening for connections on a port */
-	void start(int port, rptr f(int));
+	bool start(int port, rptr f(int));
 	/* Shutdown all connections and stop listening for connections */
 	void stop();
 	/* Method to connect to an IP on a port */
