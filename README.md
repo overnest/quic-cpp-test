@@ -9,7 +9,7 @@ var conns sync.Map
 ```
 By keeping these global they do not need to be included in function parameters and return types which allow them to exported with cgo. Since C++ can't see any of this happening calling the exported library must be done from a Singleton.
 
-Look inside the references folder to find the GoLang file that was used to generate quic_lib.so and quic_lib.h.
+Look inside the references folder to find the GoLang file that was used to generate libquic.so and libquic.h.
 The folder also includes instructions to generate the files yourself.
 
 Example instructions:
@@ -19,8 +19,8 @@ Example instructions:
 To include in another project you will need 4 files:
 1. QUIC.cpp
 2. QUIC.h
-3. quic_lib.so
-4. quic_lib.h
+3. libquic.so -> /usr/lib
+4. libquic.h
 
 Modify your makefile and follow examples below.
 
