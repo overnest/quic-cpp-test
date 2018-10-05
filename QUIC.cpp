@@ -28,7 +28,7 @@ void QUIC::connListen(int id)
 {
 	while(true)
 	{
-		char *received = receive(id);
+		char *received = quic_receive(id);
 		if(received == NULL)
 			break;
 		callBack(id, received);
@@ -59,14 +59,14 @@ bool QUIC::start(int port, rptr f(int))
 	{
 		return false;
 	}
-	running = startServer(port);
+	running = quic_startServer(port);
 	if(!running)
 	{
 		return false;
 	}
 	std::thread t([=] {
 		while(true){
-			int id = listen();
+			int id = quic_listen();
 			if(id < 0)
 			{
 				break;
@@ -83,12 +83,12 @@ bool QUIC::start(int port, rptr f(int))
 
 void QUIC::stop()
 {
-	closeAll();
+	quic_closeAll();
 }
 
 int QUIC::connect(const char *ip, int port, void f(const char *))
 {
-	int id = startConn(toGoString(ip), port);
+	int id = quic_startConn(toGoString(ip), port);
 	if(id >= 0)
 	{
 		callbacks[id] = f;
@@ -100,15 +100,15 @@ int QUIC::connect(const char *ip, int port, void f(const char *))
 
 bool connStatus(int id)
 {
-	return connExists(id);
+	return quic_connExists(id);
 }
 
 void QUIC::disconnect(int id)
 {
-	close(id);
+	quic_close(id);
 }
 
 bool QUIC::sendMsg(int id, const char *message)
 {
-	return send(id, toGoString(message));
+	return quic_send(id, toGoString(message));
 }

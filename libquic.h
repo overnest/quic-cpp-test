@@ -53,21 +53,21 @@ extern "C" {
 #endif
 
 
-extern GoUint8 startServer(GoInt p0);
+extern GoUint8 quic_startServer(GoInt p0);
 
-extern GoInt listen();
+extern GoInt quic_listen();
 
-extern void closeAll();
+extern void quic_closeAll();
 
-extern GoInt startConn(GoString p0, GoInt p1);
+extern GoInt quic_startConn(GoString p0, GoInt p1);
 
-extern GoUint8 connExists(GoInt p0);
+extern GoUint8 quic_connExists(GoInt p0);
 
-extern void close(GoInt p0);
+extern void quic_close(GoInt p0);
 
-extern GoUint8 send(GoInt p0, GoString p1);
+extern GoUint8 quic_send(GoInt p0, GoString p1);
 
-extern char* receive(GoInt p0);
+extern char* quic_receive(GoInt p0);
 
 #ifdef __cplusplus
 }

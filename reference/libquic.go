@@ -17,7 +17,7 @@ import (
 	"time"
 	"net"
 	"sync"
-	
+
 	quicconn "github.com/marten-seemann/quic-conn"
 )
 
@@ -31,15 +31,15 @@ func main(){
 	flag.Parse()
 
 	if *serverCmd {
-		startServer(8081)
+		quic_startServer(8081)
 	}
 	if *clientCmd {
-		startConn("127.0.0.1",8081)
+		quic_startConn("127.0.0.1",8081)
 	}
 }
 
-//export startServer
-func startServer(port int) bool {
+//export quic_startServer
+func quic_startServer(port int) bool {
 	tlsConf, err := generateTLSConfig()
 	if err != nil {
 		return false
@@ -53,16 +53,16 @@ func startServer(port int) bool {
 	return true
 }
 
-//export listen
-func listen() int {
+//export quic_listen
+func quic_listen() int {
 	conn, err := ln.Accept()
 	if err != nil {
 		return -1
 	}
-	
+
 	mathrand.Seed(time.Now().UnixNano())
 	id := mathrand.Intn(10000000)
-	for connExists(id) {
+	for quic_connExists(id) {
 		id = mathrand.Intn(10000000)
 	}
 
@@ -70,41 +70,41 @@ func listen() int {
 	return id
 }
 
-//export closeAll
-func closeAll(){
+//export quic_closeAll
+func quic_closeAll(){
 	ln.Close()
 	conns.Range(func(key interface{}, value interface{}) bool {
-		close(key.(int))
+		quic_close(key.(int))
 		return true
 	})
 }
 
-//export startConn
-func startConn(ip string, port int) int {
+//export quic_startConn
+func quic_startConn(ip string, port int) int {
 	tlsConf := &tls.Config{InsecureSkipVerify: true}
 	conn, err := quicconn.Dial(ip +":" + strconv.Itoa(port),tlsConf)
 	if err != nil{
 		return -1
 	}
-	
+
 	mathrand.Seed(time.Now().UnixNano())
 	id := mathrand.Intn(10000000)
-	for connExists(id) {
+	for quic_connExists(id) {
 		id = mathrand.Intn(10000000)
 	}
-	
+
 	conns.Store(id, conn)
 	return id
 }
 
-//export connExists
-func connExists(id int) bool {
+//export quic_connExists
+func quic_connExists(id int) bool {
 	_, ok := conns.Load(id)
 	return ok
 }
 
-//export close
-func close(id int){
+//export quic_close
+func quic_close(id int){
 	conn, ok := conns.Load(id)
 	if ok {
 		conn.(net.Conn).Close()
@@ -112,8 +112,8 @@ func close(id int){
 	}
 }
 
-//export send
-func send(id int, message string) bool {
+//export quic_send
+func quic_send(id int, message string) bool {
 	conn, ok := conns.Load(id)
 	if !ok {
 		return false
@@ -126,8 +126,8 @@ func send(id int, message string) bool {
 	return true
 }
 
-//export receive
-func receive(id int) *C.char {
+//export quic_receive
+func quic_receive(id int) *C.char {
 	conn, ok := conns.Load(id)
 	if !ok {
 		return nil
