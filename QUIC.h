@@ -31,6 +31,8 @@ class QUIC
 	int connect(const char *ip, int port, void f(const char *));
 	/* Method to check if connection is open */
 	bool connStatus(int id);
+	/* Method to get the IP address of a connection */
+	char* getAddr(int id);
 	/* Method to close a connection */
 	void disconnect(int id);
 	/* Method to send a message */

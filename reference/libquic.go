@@ -103,6 +103,15 @@ func quic_connExists(id int) bool {
 	return ok
 }
 
+//export quic_addr
+func quic_addr(id int) *C.char {
+	conn, ok := conns.Load(id)
+	if ! ok {
+		return nil
+	}
+	return C.CString(conn.(net.Conn).RemoteAddr().(*net.UDPAddr).IP.String())
+}
+
 //export quic_close
 func quic_close(id int){
 	conn, ok := conns.Load(id)

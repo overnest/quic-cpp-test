@@ -12,6 +12,7 @@ void Receive(const char *str){
 int main(int argc, char **argv) {
 	QUIC* q = QUIC::getInstance();
 	int id = q->connect("127.0.0.1", 8081, Receive);
+	cout << q->getAddr(id) << endl;
 	q->sendMsg(id, "hi world");
 	this_thread::sleep_for(chrono::seconds(10));
 	q->disconnect(id);

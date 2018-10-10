@@ -103,6 +103,11 @@ bool connStatus(int id)
 	return quic_connExists(id);
 }
 
+char* QUIC::getAddr(int id)
+{
+	return quic_addr(id);
+}
+
 void QUIC::disconnect(int id)
 {
 	quic_close(id);

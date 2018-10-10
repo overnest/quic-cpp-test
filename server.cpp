@@ -9,8 +9,10 @@ QUIC* q;
 int myID;
 //function that handles the response
 void receive(const char *str){
-	cout << str << endl;
-	q->sendMsg(myID, str);
+	if(str != NULL){
+		cout << str << endl;
+		q->sendMsg(myID, str);
+	}
 }
 //function that returns function pointer
 typedef void (*rptr)(const char *);

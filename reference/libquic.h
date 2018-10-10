@@ -63,6 +63,8 @@ extern GoInt quic_startConn(GoString p0, GoInt p1);
 
 extern GoUint8 quic_connExists(GoInt p0);
 
+extern char* quic_addr(GoInt p0);
+
 extern void quic_close(GoInt p0);
 
 extern GoUint8 quic_send(GoInt p0, GoString p1);
