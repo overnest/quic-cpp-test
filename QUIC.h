@@ -1,3 +1,5 @@
+#pragma once
+
 #include "libquic.h"
 
 class QUIC
