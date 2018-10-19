@@ -5,16 +5,41 @@
 
 using namespace std;
 
-void Receive(const char *str){
-	cout << str << endl;
-}
+class QUICPeer
+{
+public:
+	QUIC* quic_ptr;
+	int quic_id;
+	QUICPeer(const char *addr, int port)
+	{
+		quic_ptr = QUIC::getInstance();
+		auto callback = bind(&QUICPeer::recvMessage, this, placeholders::_1);
+		quic_id = quic_ptr->connect(addr, port, callback);
+	}
+
+	void send(const char *str)
+	{
+		quic_ptr->sendMsg(quic_id, str);
+	}
+
+	void recvMessage(const char *str)
+	{
+		if(str != NULL){
+			cout << str << endl;
+		}
+	}
+
+	void drop()
+	{
+		quic_ptr->disconnect(quic_id);
+	}
+};
 
 int main(int argc, char **argv) {
-	QUIC* q = QUIC::getInstance();
-	int id = q->connect("127.0.0.1", 8081, Receive);
-	cout << q->getAddr(id) << endl;
-	q->sendMsg(id, "hi world");
+	auto qp = QUICPeer("127.0.0.1", 8081);
+	qp.send("hi world");
+	//keep open for 10s
 	this_thread::sleep_for(chrono::seconds(10));
-	q->disconnect(id);
+	qp.drop();
 	return 0;
 }
