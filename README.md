@@ -45,15 +45,42 @@ PeerDoor::start()
     if (!mApp.getConfig().RUN_STANDALONE)
     {
         quic_ptr = QUIC::getInstance();
-        auto callback = std::bind(&PeerDoor::quicKnock, this,placeholders::_1);
-        quic_ptr->start(mApp.getConfig().PEER_PORT+1, callback);
+        quic_ptr->start(mApp.getConfig().PEER_PORT+1);
+        acceptNextQUICPeer();
 	...
     }
 }
 
+void
+PeerDoor::close()
+{
+    quic_ptr->stop();
+
+    ...
+}
+
 ...
 
-std::function<void(const char*)>
+void
+PeerDoor::acceptNextQUICPeer()
+{
+    if(mApp.getOverlayManager().isShuttingDown())
+    {
+        return;
+    }
+
+    CLOG(DEBUG, "Overlay") << "PeerDoor acceptNextQUICPeer()";
+
+    asio::thread new_thread([this]{
+        int id = quic_ptr->listen();
+        if(id >= 0)
+            quicKnock(id);
+    });
+}
+
+...
+
+void
 PeerDoor::quicKnock(int ID)
 {
     CLOG(DEBUG, "Overlay") << "PeerDoor quicKnock() @"
@@ -63,8 +90,8 @@ PeerDoor::quicKnock(int ID)
     {
         mApp.getOverlayManager().addPendingPeer(peer);
     }
-    auto callback = bind(&QUICPeer::recvMessage,peer.get(), placeholders::_1);
-    return callback;
+
+    acceptNextQUICPeer();
 }
 ```
 PeerDoor::start needs to initiate listening for both TCP and QUIC connections. You will also need to create PeerDoor::quicKnoc(int ID) to handle incoming connections. In this case I used std::bind and std::functional to return the receive function of the new Peer. You will also need to make a few small changes to PeerDoor.h:
@@ -72,8 +99,6 @@ PeerDoor::start needs to initiate listening for both TCP and QUIC connections. Y
 src/overlay/PeerDoor.h
 ```C++
 ...
-
-#include <functional>
 
 #include "overlay/QUIC.h"
 
@@ -83,7 +108,9 @@ private:
     QUIC* quic_ptr;
     
 public:
-    std::function<void(const char*)> quicKnock(int ID);
+    ...
+    void acceptNextQUICPeer();
+    void quicKnock(int ID);
     
 ...
 
@@ -122,9 +149,40 @@ OverlayManagerImpl::connectTo(PeerRecord& pr)
 OverlayManagerImpl.cpp is where connections are initiated. quic_id will be -1 if unable to connect, so thats how we know to use TCP instead. No need to update the header file. Just make sure to include the new QUICPeer.h
 
 
-The following two files are a WIP. The goal is for TCPPeer and QUICPeer to be both valid implementations of Peer.
+TCPPeer and QUICPeer are both valid implementations of Peer. When OverlayManager deals with Peer it will not need to know or care if it the Peer is a QUICPeer or TCPPeer.
+
 src/overlay/QUICPeer.cpp
 ```C++
+#include "overlay/QUICPeer.h"
+#include "database/Database.h"
+#include "main/Application.h"
+#include "main/Config.h"
+#include "medida/meter.h"
+#include "medida/metrics_registry.h"
+#include "overlay/LoadManager.h"
+#include "overlay/OverlayManager.h"
+#include "overlay/PeerRecord.h"
+#include "overlay/StellarXDR.h"
+#include "util/GlobalChecks.h"
+#include "util/Logging.h"
+#include "xdrpp/marshal.h"
+
+using namespace soci;
+
+namespace stellar
+{
+
+using namespace std;
+
+///////////////////////////////////////////////////////////////////////
+// QUICPeer
+///////////////////////////////////////////////////////////////////////
+
+QUICPeer::QUICPeer(Application& app, Peer::PeerRole role)
+    : Peer(app, role)
+{
+}
+
 QUICPeer::pointer
 QUICPeer::initiate(Application& app, PeerBareAddress const& address)
 {
@@ -135,29 +193,43 @@ QUICPeer::initiate(Application& app, PeerBareAddress const& address)
     auto result = make_shared<QUICPeer>(app, WE_CALLED_REMOTE);
     result->mAddress = address;
     result->quic_ptr = QUIC::getInstance();
-    auto callback =  bind(&QUICPeer::recvMessage,result.get(),placeholders::_1);
-    result->quic_id = result->quic_ptr->connect(address.getIP().c_str(), address.getPort()+1, callback);
+    result->quic_id = result->quic_ptr->connect(address.getIP().c_str(), address.getPort()+1);
+    
+    //connectHandler(ec=null)
+    if (result->quic_id < 0)
+    {
+        CLOG(WARNING, "Overlay")
+            << " connectHandler error: unable to connect";
+        result->mDropInConnectHandlerMeter.Mark();
+        result->drop();
+    }
+    else
+    {
+        CLOG(DEBUG, "Overlay") << "connected " << result->toString();
+        result->connected();
+        result->mState = CONNECTED;
+        result->sendHello();
+    }
     return result;
 }
 
 QUICPeer::pointer
 QUICPeer::accept(Application& app, int ID)
 {
+    shared_ptr<QUICPeer> result;
+
     CLOG(DEBUG, "Overlay") << "QUICPeer:accept"
                            << "@" << app.getConfig().PEER_PORT;
-    auto result = make_shared<QUICPeer>(app, REMOTE_CALLED_US);
-    result->startIdleTimer();
-    
+    result = make_shared<QUICPeer>(app, REMOTE_CALLED_US);
     result->quic_ptr = QUIC::getInstance();
     result->quic_id = ID;
-
+    result->connected();
     return result;
 }
 
 QUICPeer::~QUICPeer()
 {
     quic_ptr->disconnect(quic_id);
-    mIdleTimer.cancel();
 }
 
 PeerBareAddress
@@ -178,40 +250,87 @@ QUICPeer::makeAddress(int remoteListeningPort) const
 void
 QUICPeer::sendMessage(xdr::msg_ptr&& xdrBytes)
 {
+    if (mState == CLOSING)
+    {
+        CLOG(ERROR, "Overlay")
+            << "trying to send message to " << toString() << " after drop";
+        return;
+    }
     if (Logging::logTrace("Overlay"))
         CLOG(TRACE, "Overlay") << "QUICPeer:sendMessage to " << toString();
 
     // places the buffer to write into the write queue
     auto buf = std::make_shared<xdr::msg_ptr>(std::move(xdrBytes));
-
-    if(quic_id >= 0){
-        bool success = quic_ptr->sendMsg(quic_id, (*buf)->raw_data());
-        if (success)
-            return;
+    
+    bool success = quic_ptr->sendMsg(quic_id, (*buf)->data(), (*buf)->size());
+    if (!success)
+    {
+        drop();
+        return;
     }
 }
 
 void
-QUICPeer::recvMessage(const char *str)
+QUICPeer::writeHandler(asio::error_code const& error,
+                      std::size_t bytes_transferred)
 {
-    if(str == NULL)
-    {
-        drop(true);
-        return;
-    }
+    //no need to do antyhing since QUIC library already writes header
+}
+
+void
+QUICPeer::connected()
+{
+    auto self = static_pointer_cast<QUICPeer>(shared_from_this());
+
+    asio::thread new_thread([this]{
+        unsigned char *bytes = quic_ptr->receiveMsg(quic_id);
+        if(bytes != NULL)
+        {
+            int size = bytes[3] | (bytes[2] << 8) | (bytes[1] << 16) | (bytes[0] << 24);
+            if(size > 0){
+                receivedBytes(size, true);
+                recvMessage(bytes+4, size);
+            }
+        }
+        else{
+            drop(true);
+        }
+    });
+}
+
+void
+QUICPeer::readHeaderHandler(asio::error_code const& error,
+                           std::size_t bytes_transferred)
+{
+    //no need to do anything since QUIC library handles header
+}
+
+void
+QUICPeer::readBodyHandler(asio::error_code const& error,
+                         std::size_t bytes_transferred)
+{
+    //no need to do anything since QUIC library already separates header
+}
+
+void
+QUICPeer::recvMessage(unsigned char *bytes, int size)
+{
     try
     {
-        int len = 0;
-        while(str[len] != '\0') len++;
-        xdr::xdr_get g(str, str + len * sizeof(char));
+        xdr::xdr_get g(bytes,bytes+size);
         AuthenticatedMessage am;
         xdr::xdr_argpack_archive(g, am);
-        Peer::recvMessage(am);
+        
+        getApp().postOnMainThread([=](){
+            Peer::recvMessage(am);
+        });
     }
     catch (xdr::xdr_runtime_error& e)
     {
         CLOG(ERROR, "Overlay") << "recvMessage got a corrupt xdr: " << e.what();
+        Peer::drop(ERR_DATA, "received corrupt XDR");
     }
+    connected();
 }
 
 void
@@ -222,23 +341,17 @@ QUICPeer::drop(bool force)
         return;
     }
 
-    CLOG(DEBUG, "Overlay") << "TCPPeer::drop " << toString() << " in state "
+    CLOG(DEBUG, "Overlay") << "QUICPeer::drop " << toString() << " in state "
                            << mState << " we called:" << mRole;
 
     mState = CLOSING;
 
-    auto self = static_pointer_cast<QUICPeer>(shared_from_this());
-    getApp().getOverlayManager().dropPeer(this);
-
-    // if write queue is not empty, messageSender will take care of shutdown
-    if (force || !mWriting)
-    {
-        quic_ptr->disconnect(quic_id);
-    }
-    else
-    {
-        self->mDelayedShutdown = true;
-    }
+    getApp().postOnMainThread([=](){
+        getApp().getOverlayManager().dropPeer(this);
+    });
+    
+    quic_ptr->disconnect(quic_id);
+}
 }
 ```
 
@@ -267,21 +380,11 @@ class QUICPeer : public Peer
     typedef asio::buffered_stream<asio::ip::tcp::socket> SocketType;
 
   private:
-    std::vector<uint8_t> mIncomingHeader;
-    std::vector<uint8_t> mIncomingBody;
-
-    std::queue<std::shared_ptr<xdr::msg_ptr>> mWriteQueue;
-    bool mWriting{false};
-    bool mDelayedShutdown{false};
-    bool mShutdownScheduled{false};
-
     PeerBareAddress makeAddress(int remoteListeningPort) const override;
  
     void sendMessage(xdr::msg_ptr&& xdrBytes) override;
 
-
     virtual void connected() override;
-    void startRead();
 
     void writeHandler(asio::error_code const& error,
                       std::size_t bytes_transferred) override;
@@ -305,7 +408,7 @@ class QUICPeer : public Peer
     static pointer initiate(Application& app, PeerBareAddress const& address);
     static pointer accept(Application& app, int ID);
 
-    void recvMessage(const char *str);
+    void recvMessage(unsigned char *bytes, int size);
 
     virtual ~QUICPeer();
 
