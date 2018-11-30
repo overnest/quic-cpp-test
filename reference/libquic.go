@@ -1,5 +1,8 @@
 package main
 
+/*
+#include <stdlib.h>
+*/
 import "C"
 
 import (
@@ -10,8 +13,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"flag"
+	"encoding/binary"
 	"fmt"
+	"unsafe"
 	"math/big"
 	mathrand "math/rand"
 	"time"
@@ -25,17 +29,6 @@ var ln net.Listener
 var conns sync.Map
 
 func main(){
-
-	serverCmd := flag.Bool("s", false, "server")
-	clientCmd := flag.Bool("c", false, "client")
-	flag.Parse()
-
-	if *serverCmd {
-		quic_startServer(8081)
-	}
-	if *clientCmd {
-		quic_startConn("127.0.0.1",8081)
-	}
 }
 
 //export quic_startServer
@@ -121,44 +114,71 @@ func quic_close(id int){
 	}
 }
 
+func CArrayToByteSlice(array unsafe.Pointer, size int) []byte {
+	var arrayptr = uintptr(array)
+	var byteSlice = make([]byte, size)
+
+	for i := 0; i < len(byteSlice); i++ {
+		byteSlice[i] = byte(*(*C.char)(unsafe.Pointer(arrayptr)))
+		arrayptr++
+	}
+
+	return byteSlice
+}
+
 //export quic_send
-func quic_send(id int, message string) bool {
+func quic_send(id int, message unsafe.Pointer, size int) bool {
 	conn, ok := conns.Load(id)
 	if !ok {
 		return false
 	}
-	messageBytes := []byte(message)
-	length := len(messageBytes)
-	bs := []byte{byte(length >> 24), byte(length >> 16), byte(length >> 8), byte(length)}
+
+	messageBytes := CArrayToByteSlice(message, size)
+	bs := make([]byte, 4)
+	binary.LittleEndian.PutUint32(bs, uint32(size))
 	conn.(net.Conn).Write(bs)
+	//for i := 0; i < len(messageBytes); i++ {
+	//	conn.(net.Conn).Write([]byte{messageBytes[i]});
+	//}
 	conn.(net.Conn).Write(messageBytes)
 	return true
 }
 
+func ByteSliceToCArray(byteSlice []byte) unsafe.Pointer {
+	var array = unsafe.Pointer(C.calloc(C.size_t(len(byteSlice)),1))
+	var arrayptr = uintptr(array)
+
+	for i := 0; i < len(byteSlice); i++ {
+		*(*C.char)(unsafe.Pointer(arrayptr)) = C.char(byteSlice[i])
+		arrayptr++
+	}
+
+	return array
+}
+
 //export quic_receive
-func quic_receive(id int) *C.char {
+func quic_receive(id int) unsafe.Pointer {
 	conn, ok := conns.Load(id)
 	if !ok {
 		return nil
 	}
 
 	reader := bufio.NewReader(conn.(net.Conn))
-	a, err := reader.ReadByte()
-	b, err := reader.ReadByte()
-	c, err := reader.ReadByte()
-	d, err := reader.ReadByte()
-
-	if err != nil {
-		conns.Delete(id)
-		return nil
+	bs := make([]byte, 4)
+	for i := 0; i < 4; i++ {
+		bs[i], _ = reader.ReadByte()
 	}
-	length := int(d) | int(c << 8) | int(b << 16) | int(a << 24)
-	readBytes := make([]byte,length)
-	for i := 0; i < length; i++ {
-		readBytes[i], err = reader.ReadByte()
+	length := int(binary.LittleEndian.Uint32(bs))
+	readBytes := make([]byte,length + 4)
+	readBytes[0] = bs[0];
+	readBytes[1] = bs[1];
+	readBytes[2] = bs[2];
+	readBytes[3] = bs[3];
+	for i := 4; i < length + 4; i++ {
+		readBytes[i], _ = reader.ReadByte()
 	}
 
-	return C.CString(string(readBytes))
+	return ByteSliceToCArray(readBytes)
 }
 
 func generateTLSConfig() (*tls.Config, error){
